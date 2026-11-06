@@ -60,3 +60,6 @@ htmlcov/
 # Logs
 *.log
 !Cultive8_Workspace_Agrigen_Server.log
+
+# Video Script
+VIDEO_SCRIPT.md
