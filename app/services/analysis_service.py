@@ -65,13 +65,27 @@ class AnalysisService:
         db.update_job(job_id, status=JobStatus.RUNNING.value, current_stage=Stage.CHUNKING.value)
         file_path = Path(job["file_path"])
 
-        # Check memory headroom before starting
-        mem_rss = psutil.virtual_memory().used / (1024 * 1024)
-        if mem_rss > settings.max_ram_usage_mb:
+        # Check Sentinel + model process memory against configured limit
+        proc = psutil.Process()
+        app_mem_mb = proc.memory_info().rss / (1024 * 1024)
+        model_mem_mb = model_service.get_server_rss_mb()
+        sentinel_total_mb = app_mem_mb + model_mem_mb
+
+        if sentinel_total_mb > settings.max_ram_usage_mb:
             db.update_job(
                 job_id,
                 status=JobStatus.FAILED.value,
-                error_message=f"System RAM threshold exceeded ({mem_rss:.1f} MB > {settings.max_ram_usage_mb} MB). Paused for safety."
+                error_message=f"Sentinel RAM footprint exceeded ({sentinel_total_mb:.1f} MB > {settings.max_ram_usage_mb} MB). Paused for safety."
+            )
+            return
+
+        # Check if system has sufficient available RAM to operate safely
+        avail_mb = psutil.virtual_memory().available / (1024 * 1024)
+        if avail_mb < 300:
+            db.update_job(
+                job_id,
+                status=JobStatus.FAILED.value,
+                error_message=f"Low available system memory ({avail_mb:.1f} MB < 300 MB). Paused for safety."
             )
             return
 

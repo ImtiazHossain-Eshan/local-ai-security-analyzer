@@ -34,6 +34,7 @@ class ProgressResponse(BaseModel):
     elapsed_seconds: float
     model_rss_mb: float
     system_available_ram_mb: float
+    error_message: Optional[str] = None
 
 @router.get("/health")
 async def health_check():
@@ -149,5 +150,6 @@ async def get_job_progress(job_id: str):
         total_tokens=job.get("total_tokens", 0),
         elapsed_seconds=round(elapsed, 1),
         model_rss_mb=mem_rss,
-        system_available_ram_mb=avail_ram
+        system_available_ram_mb=avail_ram,
+        error_message=job.get("error_message")
     )

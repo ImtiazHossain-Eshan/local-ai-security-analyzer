@@ -209,7 +209,9 @@ function startProgressPolling(jobId) {
       } else if (p.status === 'FAILED') {
         clearInterval(progressPollTimer);
         progressPollTimer = null;
-        alert('Analysis encountered an error. Please inspect logs.');
+        const msg = p.error_message || 'Analysis encountered an error. Please inspect logs.';
+        liveActivityBox.innerHTML += `<div class="live-activity-line" style="color: #f85149;">[-] Error: ${escapeHtml(msg)}</div>`;
+        alert(`Analysis Error: ${msg}`);
         btnAnalyze.disabled = false;
         btnAnalyze.textContent = 'Start Security Analysis';
       }
