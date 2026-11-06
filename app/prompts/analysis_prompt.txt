@@ -1,0 +1,39 @@
+# SENTINEL ANALYSIS PROMPT v1.3
+Analyze log chunk {chunk_id} (Lines {start_line}-{end_line}) for security threats.
+
+TARGET CATEGORIES:
+A. Brute-force/Credential Attacks: Repeated failed logins (401), account/IP targeting, failures followed by success. (Single typos are Low/Benign).
+B. SQL Injection: SQL syntax (UNION, SELECT, OR 1=1), parameter injection. Note if blocked or error.
+C. Automated Scanning/Rates: High frequency, 429 status, scanner user-agents.
+D. Unauthorized Access/Privilege Abuse: Admin access, unexpected data/CSV exports following auth.
+E. Directory Scanning: Probes for .env, .git, /wp-admin/, /phpmyadmin/, backup files. (404 = blocked probe).
+F. Operational Anomalies: 502/504 supplier or service issues (classify as Operational finding).
+
+PREVIOUS SECURITY CONTEXT:
+{compact_context_json}
+
+CHUNK LOG ENTRIES:
+{log_entries_text}
+
+SCHEMA (JSON ONLY):
+{{
+  "chunk_id": {chunk_id},
+  "findings": [
+    {{
+      "attack_type": "string",
+      "severity": "Critical|High|Medium|Low",
+      "source_ip": "IP or Unknown",
+      "account": "username or null",
+      "evidence": [{{"line": 12, "excerpt": "exact text"}}],
+      "reason": "short explanation",
+      "suggested_action": "mitigation recommendation",
+      "confidence": 0.90,
+      "disposition": "Attempted attack|Blocked attack attempt|Suspicious activity|Possible compromise|Confirmed compromise|Operational finding"
+    }}
+  ],
+  "context_updates": {{
+    "ip_activities": [{{"ip": "string", "account": "string", "failed_logins": 0, "successful_logins": 0, "first_line": 0, "last_line": 0}}],
+    "attack_indicators": ["string"],
+    "open_investigations": ["string"]
+  }}
+}}
