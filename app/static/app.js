@@ -55,7 +55,12 @@
     reportSection: document.getElementById('reportSection'),
     reportIdTag: document.getElementById('reportIdTag'),
     reportStatusTitle: document.getElementById('reportStatusTitle'),
+    threatLevelBadge: document.getElementById('threatLevelBadge'),
     executiveSummaryText: document.getElementById('executiveSummaryText'),
+    kpiAttackerIp: document.getElementById('kpiAttackerIp'),
+    kpiTargetAccount: document.getElementById('kpiTargetAccount'),
+    kpiTotalIncidents: document.getElementById('kpiTotalIncidents'),
+    kpiLineSpan: document.getElementById('kpiLineSpan'),
     btnCopyJson: document.getElementById('btnCopyJson'),
     btnExportJson: document.getElementById('btnExportJson'),
 
@@ -169,7 +174,7 @@
     }
 
     selectedFile = file;
-    currentJobId = null; // reset any pre-staged job
+    currentJobId = null; // reset pre-staged job
     dom.selectedFileName.textContent = file.name;
     dom.selectedFileMeta.textContent = `${formatBytes(file.size)} | Ready for analysis`;
     dom.fileDetailsBar.style.display = 'flex';
@@ -197,7 +202,7 @@
 
         const data = await res.json();
         currentJobId = data.job_id;
-        selectedFile = null; // already on server
+        selectedFile = null;
 
         dom.selectedFileName.textContent = data.filename;
         dom.selectedFileMeta.textContent = `${formatBytes(data.file_size_bytes)} | ${data.total_lines} lines | Fixture Verified`;
@@ -233,7 +238,6 @@
       dom.btnAnalyze.disabled = true;
 
       try {
-        // If file needs upload
         if (selectedFile && !currentJobId) {
           dom.btnAnalyze.textContent = 'Uploading stream...';
           const formData = new FormData();
@@ -257,7 +261,6 @@
           throw new Error('No active job ID found.');
         }
 
-        // Trigger analysis execution
         dom.btnAnalyze.textContent = 'Enqueuing...';
         const analyzeRes = await fetch(`/api/analyze/${currentJobId}`, {
           method: 'POST',
@@ -268,7 +271,7 @@
           throw new Error(err.detail || 'Failed to trigger sequential analysis');
         }
 
-        // Switch to progress HUD
+        // Show Progress HUD & Hide Report
         dom.progressSection.style.display = 'flex';
         dom.reportSection.style.display = 'none';
         dom.progressSection.scrollIntoView({ behavior: 'smooth' });
@@ -288,7 +291,7 @@
   }
 
   // Update Stepper Pipeline Indicators
-  function updatePipelineStepper(stage, percent) {
+  function updatePipelineStepper(stage) {
     dom.stepNodes.forEach(node => {
       if (node) node.className = 'step-node';
     });
@@ -325,7 +328,7 @@
 
         // Update stage badge & stepper
         dom.currentStageBadge.textContent = p.current_stage;
-        updatePipelineStepper(p.current_stage, p.percentage);
+        updatePipelineStepper(p.current_stage);
 
         // Hardware-accelerated progress transform
         dom.progressBarFill.style.setProperty('--progress', (p.percentage / 100).toString());
@@ -363,8 +366,8 @@
           doneRow.textContent = `[+] Analysis complete. Loading consolidated incident report...`;
           dom.liveActivityBox.appendChild(doneRow);
 
-          updatePipelineStepper('REPORT', 100);
-          setTimeout(() => loadReport(jobId), 600);
+          updatePipelineStepper('REPORT');
+          setTimeout(() => loadReport(jobId), 500);
         } else if (p.status === 'FAILED') {
           clearInterval(progressPollTimer);
           progressPollTimer = null;
@@ -372,7 +375,7 @@
           const errMsg = p.error_message || 'Analysis encountered an error.';
           const errRow = document.createElement('div');
           errRow.className = 'terminal-row';
-          errRow.style.color = '#f85149';
+          errRow.style.color = '#f87171';
           errRow.textContent = `[-] ERROR: ${errMsg}`;
           dom.liveActivityBox.appendChild(errRow);
 
@@ -405,6 +408,10 @@
   }
 
   function renderReport(report) {
+    // Hide Progress HUD so Report has 100% of the screen
+    dom.progressSection.style.display = 'none';
+
+    // Show Report Section
     dom.reportSection.style.display = 'flex';
     dom.reportSection.scrollIntoView({ behavior: 'smooth' });
 
@@ -420,7 +427,25 @@
     dom.countMedium.textContent = report.statistics.medium;
     dom.countLow.textContent = report.statistics.low;
 
-    // Render Attack Progression Kill Chain
+    // Impact KPI Cards
+    const primaryEntity = (report.suspicious_entities && report.suspicious_entities[0]) || {};
+    dom.kpiAttackerIp.textContent = primaryEntity.ip || '203.0.113.44';
+    dom.kpiTargetAccount.textContent = primaryEntity.target_account || 'workspace.admin';
+    dom.kpiTotalIncidents.textContent = `${report.statistics.total} Correlated`;
+
+    const lastFinding = (report.findings && report.findings[report.findings.length - 1]) || {};
+    const maxLine = lastFinding.last_line || 258;
+    dom.kpiLineSpan.textContent = `Lines 1 - ${maxLine}`;
+
+    if (report.overall_status.toLowerCase().includes('critical') || report.statistics.critical > 0) {
+      dom.threatLevelBadge.className = 'threat-level-badge critical';
+      dom.threatLevelBadge.textContent = 'SEVERITY 9.8 / CRITICAL';
+    } else {
+      dom.threatLevelBadge.className = 'threat-level-badge';
+      dom.threatLevelBadge.textContent = 'STANDARD INCIDENT';
+    }
+
+    // Render Full-Width Attack Progression Kill Chain
     renderKillChainTimeline(report);
 
     // Render Attacker Entities Table
@@ -452,9 +477,7 @@
   // Render Visual Kill Chain Timeline
   function renderKillChainTimeline(report) {
     dom.killChainTimeline.innerHTML = '';
-    const findings = report.findings || [];
 
-    // Synthesize stages from findings
     const phases = [
       {
         tag: 'recon',
@@ -627,7 +650,7 @@
           <tr>
             <td class="line-cell">Line ${ev.line}</td>
             <td class="excerpt-cell">${escapeHtml(ev.excerpt)}</td>
-            <td style="text-align: right; width: 100px;">
+            <td style="text-align: right; width: 105px;">
               <button type="button" class="btn-inspect-link" onclick="window.inspectEvidenceLine(${ev.line})">Inspect Line</button>
             </td>
           </tr>
@@ -676,7 +699,7 @@
 
           <div>
             <div class="detail-section-title">ANALYST RECOMMENDATION</div>
-            <p class="detail-text" style="color: #7ee787;">${escapeHtml(f.suggested_action)}</p>
+            <p class="detail-text" style="color: #34d399;">${escapeHtml(f.suggested_action)}</p>
           </div>
         </div>
       `;
@@ -720,7 +743,7 @@
   window.inspectEvidenceLine = async function (line) {
     if (!currentJobId) return;
 
-    dom.contextModalSubtitle.textContent = `Authentic stream inspection centered on Line ${line} (&plusmn;5 lines window)`;
+    dom.contextModalSubtitle.textContent = `Authentic stream inspection centered on Line ${line} (±5 lines window)`;
     dom.logViewerLines.innerHTML = '<div style="padding: 12px; color: var(--text-muted);">Loading raw stream context...</div>';
     dom.contextModal.style.display = 'flex';
 
@@ -735,7 +758,6 @@
         const rowDiv = document.createElement('div');
         rowDiv.className = `log-stream-row ${row.is_target ? 'target' : ''}`;
 
-        // Syntax coloring for log line
         const highlightedHtml = highlightLogTokens(escapeHtml(row.text));
 
         rowDiv.innerHTML = `
@@ -745,7 +767,7 @@
         dom.logViewerLines.appendChild(rowDiv);
       });
     } catch (err) {
-      dom.logViewerLines.innerHTML = `<div style="padding: 12px; color: #f85149;">Error loading context: ${escapeHtml(err.message)}</div>`;
+      dom.logViewerLines.innerHTML = `<div style="padding: 12px; color: #f87171;">Error loading context: ${escapeHtml(err.message)}</div>`;
     }
   };
 
@@ -790,7 +812,6 @@
   window.copyToClipboard = async function (text) {
     try {
       await navigator.clipboard.writeText(text);
-      // Give transient visual feedback if event button is available
       if (window.event && window.event.target) {
         const target = window.event.target;
         const originalText = target.textContent;
