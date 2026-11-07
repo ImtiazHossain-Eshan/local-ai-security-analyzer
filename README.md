@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/sentinel_hero.svg" alt="Sentinel Local AI Security Intelligence Console" width="100%">
+  <img src="docs/assets/sentinel_hero.png" alt="Sentinel Local AI Security Intelligence Console" width="100%">
 </p>
 
 <div align="center">
