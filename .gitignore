@@ -39,8 +39,9 @@ data/*.db-wal
 data/*.db-shm
 data/*.sqlite
 data/*.sqlite3
-data/uploads/*
+data/uploads/**
 !data/uploads/.gitkeep
+data/uploads/Cultive8_Workspace_Agrigen_Server.log
 
 # Environment variables & secrets
 .env
@@ -59,7 +60,7 @@ htmlcov/
 
 # Logs
 *.log
-!Cultive8_Workspace_Agrigen_Server.log
+!/Cultive8_Workspace_Agrigen_Server.log
 
 # Video Script
 VIDEO_SCRIPT.md

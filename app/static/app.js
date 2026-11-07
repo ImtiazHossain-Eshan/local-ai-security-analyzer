@@ -1,394 +1,809 @@
 /**
- * Sentinel Security Analyzer Frontend Application.
- * Handles log uploads, live progress tracking, evidence inspection, and report export.
+ * Sentinel Security Analyzer - High-Density SOC Command Console
+ * Offline-capable local AI triage and deterministic correlation engine.
  */
 
-let currentJobId = null;
-let selectedFile = null;
-let progressPollTimer = null;
-let statusPollTimer = null;
+(function () {
+  'use strict';
 
-// DOM Elements
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const fileDetailsBar = document.getElementById('fileDetailsBar');
-const selectedFileName = document.getElementById('selectedFileName');
-const selectedFileMeta = document.getElementById('selectedFileMeta');
-const btnAnalyze = document.getElementById('btnAnalyze');
+  // State Management
+  let currentJobId = null;
+  let selectedFile = null;
+  let currentReport = null;
+  let activeSeverityFilter = 'ALL';
+  let activeSearchQuery = '';
+  let progressPollTimer = null;
+  let statusPollTimer = null;
 
-const modelStatusPill = document.getElementById('modelStatusPill');
-const systemRamPill = document.getElementById('systemRamPill');
+  // Cache DOM References
+  const dom = {
+    // Header telemetry
+    modelStatusPill: document.getElementById('modelStatusPill'),
+    modelStatusDot: document.getElementById('modelStatusDot'),
+    modelStatusLabel: document.getElementById('modelStatusLabel'),
+    ramStatusLabel: document.getElementById('ramStatusLabel'),
 
-const progressSection = document.getElementById('progressSection');
-const currentStageBadge = document.getElementById('currentStageBadge');
-const elapsedTimer = document.getElementById('elapsedTimer');
-const progressBarFill = document.getElementById('progressBarFill');
-const chunkCounter = document.getElementById('chunkCounter');
-const percentCounter = document.getElementById('percentCounter');
-const tokenCounter = document.getElementById('tokenCounter');
-const modelMemCounter = document.getElementById('modelMemCounter');
-const liveActivityBox = document.getElementById('liveActivityBox');
+    // Ingestion
+    uploadSection: document.getElementById('uploadSection'),
+    dropZone: document.getElementById('dropZone'),
+    fileInput: document.getElementById('fileInput'),
+    btnLoadSample: document.getElementById('btnLoadSample'),
+    fileDetailsBar: document.getElementById('fileDetailsBar'),
+    selectedFileName: document.getElementById('selectedFileName'),
+    selectedFileMeta: document.getElementById('selectedFileMeta'),
+    btnAnalyze: document.getElementById('btnAnalyze'),
 
-const reportSection = document.getElementById('reportSection');
-const reportIdTag = document.getElementById('reportIdTag');
-const reportStatusTitle = document.getElementById('reportStatusTitle');
-const executiveSummaryText = document.getElementById('executiveSummaryText');
-const countTotal = document.getElementById('countTotal');
-const countCritical = document.getElementById('countCritical');
-const countHigh = document.getElementById('countHigh');
-const countMedium = document.getElementById('countMedium');
-const countLow = document.getElementById('countLow');
-const entitiesTableBody = document.getElementById('entitiesTableBody');
-const categoriesList = document.getElementById('categoriesList');
-const findingsList = document.getElementById('findingsList');
-const btnExportJson = document.getElementById('btnExportJson');
+    // Pipeline HUD
+    progressSection: document.getElementById('progressSection'),
+    elapsedTimer: document.getElementById('elapsedTimer'),
+    currentStageBadge: document.getElementById('currentStageBadge'),
+    progressBarFill: document.getElementById('progressBarFill'),
+    chunkCounter: document.getElementById('chunkCounter'),
+    percentCounter: document.getElementById('percentCounter'),
+    tokenCounter: document.getElementById('tokenCounter'),
+    modelMemCounter: document.getElementById('modelMemCounter'),
+    liveActivityBox: document.getElementById('liveActivityBox'),
+    stepNodes: [
+      document.getElementById('stepNode1'),
+      document.getElementById('stepNode2'),
+      document.getElementById('stepNode3'),
+      document.getElementById('stepNode4'),
+      document.getElementById('stepNode5'),
+    ],
 
-const contextModal = document.getElementById('contextModal');
-const contextModalSubtitle = document.getElementById('contextModalSubtitle');
-const logViewerLines = document.getElementById('logViewerLines');
-const btnCloseModal = document.getElementById('btnCloseModal');
+    // Report
+    reportSection: document.getElementById('reportSection'),
+    reportIdTag: document.getElementById('reportIdTag'),
+    reportStatusTitle: document.getElementById('reportStatusTitle'),
+    executiveSummaryText: document.getElementById('executiveSummaryText'),
+    btnCopyJson: document.getElementById('btnCopyJson'),
+    btnExportJson: document.getElementById('btnExportJson'),
 
-// Escape helper to prevent XSS from untrusted log strings
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+    // Filters
+    countTotal: document.getElementById('countTotal'),
+    countCritical: document.getElementById('countCritical'),
+    countHigh: document.getElementById('countHigh'),
+    countMedium: document.getElementById('countMedium'),
+    countLow: document.getElementById('countLow'),
+    findingSearchInput: document.getElementById('findingSearchInput'),
+    visibleFindingsCount: document.getElementById('visibleFindingsCount'),
 
-// 1. Initial State & Status Polling
-async function pollSystemStatus() {
-  try {
-    const res = await fetch('/api/model/status');
-    if (res.ok) {
-      const data = await res.json();
-      const dot = modelStatusPill.querySelector('.status-dot');
-      const label = modelStatusPill.querySelector('.status-label');
+    // Layout containers
+    killChainTimeline: document.getElementById('killChainTimeline'),
+    findingsList: document.getElementById('findingsList'),
+    entitiesTableBody: document.getElementById('entitiesTableBody'),
+    categoriesList: document.getElementById('categoriesList'),
 
-      if (data.ready) {
-        dot.className = 'status-dot';
-        label.textContent = `Model: Ready (${data.model_name})`;
-      } else if (data.available) {
-        dot.className = 'status-dot warning';
-        label.textContent = 'Model: Starting runtime...';
-      } else {
-        dot.className = 'status-dot danger';
-        label.textContent = 'Model: Missing weights';
-      }
+    // Modal
+    contextModal: document.getElementById('contextModal'),
+    contextModalSubtitle: document.getElementById('contextModalSubtitle'),
+    logViewerLines: document.getElementById('logViewerLines'),
+    btnCloseModal: document.getElementById('btnCloseModal'),
+  };
 
-      const ramLabel = systemRamPill.querySelector('.status-label');
-      ramLabel.textContent = `RAM: ${Math.round(data.model_memory_rss_mb)} MB (Model)`;
-    }
-  } catch (err) {
-    console.warn('System status poll failed', err);
-  }
-}
-
-// 2. Drag & Drop and File Selection
-dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropZone.classList.add('dragover');
-});
-
-dropZone.addEventListener('dragleave', () => {
-  dropZone.classList.remove('dragover');
-});
-
-dropZone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
-  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-    handleFileSelected(e.dataTransfer.files[0]);
-  }
-});
-
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files && e.target.files.length > 0) {
-    handleFileSelected(e.target.files[0]);
-  }
-});
-
-function handleFileSelected(file) {
-  const ext = file.name.slice((file.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
-  if (ext !== 'log' && ext !== 'txt') {
-    alert('Please select a valid .log or .txt file.');
-    return;
+  // Helper: Secure HTML escape
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
-  selectedFile = file;
-  selectedFileName.textContent = file.name;
-  const sizeKb = (file.size / 1024).toFixed(1);
-  selectedFileMeta.textContent = `${sizeKb} KB | Ready for upload`;
-
-  fileDetailsBar.style.display = 'flex';
-  btnAnalyze.disabled = false;
-}
-
-// 3. File Upload & Trigger Analysis
-btnAnalyze.addEventListener('click', async () => {
-  if (!selectedFile) return;
-
-  btnAnalyze.disabled = true;
-  btnAnalyze.textContent = 'Uploading...';
-
-  const formData = new FormData();
-  formData.append('file', selectedFile);
-
-  try {
-    const uploadRes = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json();
-      throw new Error(err.detail || 'Upload failed');
-    }
-
-    const uploadData = await uploadRes.json();
-    currentJobId = uploadData.job_id;
-
-    // Trigger sequential analysis
-    btnAnalyze.textContent = 'Enqueuing...';
-    const analyzeRes = await fetch(`/api/analyze/${currentJobId}`, {
-      method: 'POST'
-    });
-
-    if (!analyzeRes.ok) {
-      const err = await analyzeRes.json();
-      throw new Error(err.detail || 'Failed to trigger analysis');
-    }
-
-    // Switch UI to Live Progress
-    progressSection.style.display = 'flex';
-    reportSection.style.display = 'none';
-    startProgressPolling(currentJobId);
-
-  } catch (err) {
-    alert(`Error: ${err.message}`);
-    btnAnalyze.disabled = false;
-    btnAnalyze.textContent = 'Start Security Analysis';
+  // Helper: Format bytes
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
-});
 
-// 4. Progress Polling
-function startProgressPolling(jobId) {
-  if (progressPollTimer) clearInterval(progressPollTimer);
-
-  progressPollTimer = setInterval(async () => {
+  // 1. Initial State & Continuous Telemetry Polling
+  async function pollSystemStatus() {
     try {
-      const res = await fetch(`/api/jobs/${jobId}/progress`);
+      const res = await fetch('/api/model/status');
       if (!res.ok) return;
 
-      const p = await res.json();
+      const data = await res.json();
+      if (data.ready) {
+        dom.modelStatusDot.className = 'pulse-beacon';
+        dom.modelStatusLabel.textContent = `Model: ${data.model_name}`;
+      } else if (data.available) {
+        dom.modelStatusDot.className = 'pulse-beacon warning';
+        dom.modelStatusLabel.textContent = 'Model: Initializing engine...';
+      } else {
+        dom.modelStatusDot.className = 'pulse-beacon danger';
+        dom.modelStatusLabel.textContent = 'Model: Missing local GGUF';
+      }
 
-      currentStageBadge.textContent = p.current_stage;
-      progressBarFill.style.width = `${p.percentage}%`;
-      chunkCounter.textContent = `${p.current_chunk} / ${p.total_chunks}`;
-      percentCounter.textContent = `${p.percentage}%`;
-      tokenCounter.textContent = p.total_tokens.toLocaleString();
-      modelMemCounter.textContent = `${Math.round(p.model_rss_mb)} MB`;
+      const rss = Math.round(data.model_memory_rss_mb || 0);
+      dom.ramStatusLabel.textContent = `RAM: ${rss} MB (Model)`;
+    } catch (err) {
+      console.warn('[Sentinel] System status poll failed:', err);
+    }
+  }
 
-      const mins = Math.floor(p.elapsed_seconds / 60).toString().padStart(2, '0');
-      const secs = Math.floor(p.elapsed_seconds % 60).toString().padStart(2, '0');
-      elapsedTimer.textContent = `Elapsed: ${mins}:${secs}`;
+  // 2. Drag & Drop and File Selection Handlers
+  if (dom.dropZone && dom.fileInput) {
+    dom.dropZone.addEventListener('click', () => dom.fileInput.click());
 
-      const activeText = `Processing Chunk ${p.current_chunk} of ${p.total_chunks} [Completed: ${p.completed_chunks}, Failed: ${p.failed_chunks}] - Stage: ${p.current_stage}`;
-      liveActivityBox.innerHTML = `<div class="live-activity-line">&gt; ${escapeHtml(activeText)}</div>`;
+    dom.dropZone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        dom.fileInput.click();
+      }
+    });
 
-      if (p.status === 'COMPLETED') {
-        clearInterval(progressPollTimer);
-        progressPollTimer = null;
-        liveActivityBox.innerHTML += `<div class="live-activity-line" style="color: #38bdf8;">[+] Analysis complete! Loading consolidated incident report...</div>`;
-        setTimeout(() => loadReport(jobId), 800);
-      } else if (p.status === 'FAILED') {
-        clearInterval(progressPollTimer);
-        progressPollTimer = null;
-        const msg = p.error_message || 'Analysis encountered an error. Please inspect logs.';
-        liveActivityBox.innerHTML += `<div class="live-activity-line" style="color: #f85149;">[-] Error: ${escapeHtml(msg)}</div>`;
-        alert(`Analysis Error: ${msg}`);
-        btnAnalyze.disabled = false;
-        btnAnalyze.textContent = 'Start Security Analysis';
+    dom.dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dom.dropZone.classList.add('dragover');
+    });
+
+    dom.dropZone.addEventListener('dragleave', () => {
+      dom.dropZone.classList.remove('dragover');
+    });
+
+    dom.dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dom.dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFileSelected(e.dataTransfer.files[0]);
+      }
+    });
+
+    dom.fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleFileSelected(e.target.files[0]);
+      }
+    });
+  }
+
+  function handleFileSelected(file) {
+    const ext = file.name.slice((file.name.lastIndexOf('.') - 1 >>> 0) + 2).toLowerCase();
+    if (ext !== 'log' && ext !== 'txt') {
+      alert('Security analyzer requires .log or .txt server log files.');
+      return;
+    }
+
+    selectedFile = file;
+    currentJobId = null; // reset any pre-staged job
+    dom.selectedFileName.textContent = file.name;
+    dom.selectedFileMeta.textContent = `${formatBytes(file.size)} | Ready for analysis`;
+    dom.fileDetailsBar.style.display = 'flex';
+    dom.btnAnalyze.disabled = false;
+    dom.btnAnalyze.innerHTML = `
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Run Security Analysis
+    `;
+  }
+
+  // 1-Click Load Regression Fixture
+  if (dom.btnLoadSample) {
+    dom.btnLoadSample.addEventListener('click', async () => {
+      dom.btnLoadSample.disabled = true;
+      dom.btnLoadSample.innerHTML = `Loading fixture...`;
+
+      try {
+        const res = await fetch('/api/load-sample', { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Could not load regression fixture');
+        }
+
+        const data = await res.json();
+        currentJobId = data.job_id;
+        selectedFile = null; // already on server
+
+        dom.selectedFileName.textContent = data.filename;
+        dom.selectedFileMeta.textContent = `${formatBytes(data.file_size_bytes)} | ${data.total_lines} lines | Fixture Verified`;
+        dom.fileDetailsBar.style.display = 'flex';
+        dom.btnAnalyze.disabled = false;
+        dom.btnAnalyze.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Run Security Analysis
+        `;
+      } catch (err) {
+        alert(`Error loading sample log: ${err.message}`);
+      } finally {
+        dom.btnLoadSample.disabled = false;
+        dom.btnLoadSample.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Load Regression Fixture (92 KB)
+        `;
+      }
+    });
+  }
+
+  // 3. Initiate Security Analysis Flow
+  if (dom.btnAnalyze) {
+    dom.btnAnalyze.addEventListener('click', async () => {
+      dom.btnAnalyze.disabled = true;
+
+      try {
+        // If file needs upload
+        if (selectedFile && !currentJobId) {
+          dom.btnAnalyze.textContent = 'Uploading stream...';
+          const formData = new FormData();
+          formData.append('file', selectedFile);
+
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!uploadRes.ok) {
+            const err = await uploadRes.json();
+            throw new Error(err.detail || 'Upload stream failed');
+          }
+
+          const uploadData = await uploadRes.json();
+          currentJobId = uploadData.job_id;
+        }
+
+        if (!currentJobId) {
+          throw new Error('No active job ID found.');
+        }
+
+        // Trigger analysis execution
+        dom.btnAnalyze.textContent = 'Enqueuing...';
+        const analyzeRes = await fetch(`/api/analyze/${currentJobId}`, {
+          method: 'POST',
+        });
+
+        if (!analyzeRes.ok) {
+          const err = await analyzeRes.json();
+          throw new Error(err.detail || 'Failed to trigger sequential analysis');
+        }
+
+        // Switch to progress HUD
+        dom.progressSection.style.display = 'flex';
+        dom.reportSection.style.display = 'none';
+        dom.progressSection.scrollIntoView({ behavior: 'smooth' });
+
+        startProgressPolling(currentJobId);
+      } catch (err) {
+        alert(`Analysis failed: ${err.message}`);
+        dom.btnAnalyze.disabled = false;
+        dom.btnAnalyze.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Run Security Analysis
+        `;
+      }
+    });
+  }
+
+  // Update Stepper Pipeline Indicators
+  function updatePipelineStepper(stage, percent) {
+    dom.stepNodes.forEach(node => {
+      if (node) node.className = 'step-node';
+    });
+
+    const stageMap = {
+      INGESTION: 0,
+      CHUNKING: 1,
+      INFERENCE: 2,
+      CORRELATION: 3,
+      REPORT: 4,
+    };
+
+    const currentIdx = stageMap[stage] ?? 0;
+    for (let i = 0; i < dom.stepNodes.length; i++) {
+      if (!dom.stepNodes[i]) continue;
+      if (i < currentIdx) {
+        dom.stepNodes[i].className = 'step-node completed';
+      } else if (i === currentIdx) {
+        dom.stepNodes[i].className = 'step-node active';
+      }
+    }
+  }
+
+  // 4. Multi-Pass Progress Polling
+  function startProgressPolling(jobId) {
+    if (progressPollTimer) clearInterval(progressPollTimer);
+
+    progressPollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}/progress`);
+        if (!res.ok) return;
+
+        const p = await res.json();
+
+        // Update stage badge & stepper
+        dom.currentStageBadge.textContent = p.current_stage;
+        updatePipelineStepper(p.current_stage, p.percentage);
+
+        // Hardware-accelerated progress transform
+        dom.progressBarFill.style.setProperty('--progress', (p.percentage / 100).toString());
+
+        // Update telemetry figures
+        dom.chunkCounter.textContent = `${p.current_chunk} / ${p.total_chunks}`;
+        dom.percentCounter.textContent = `${p.percentage}%`;
+        dom.tokenCounter.textContent = Number(p.total_tokens).toLocaleString();
+        dom.modelMemCounter.textContent = `${Math.round(p.model_rss_mb)} MB`;
+
+        // Elapsed time
+        const mins = Math.floor(p.elapsed_seconds / 60).toString().padStart(2, '0');
+        const secs = Math.floor(p.elapsed_seconds % 60).toString().padStart(2, '0');
+        const clockVal = dom.elapsedTimer.querySelector('.clock-val');
+        if (clockVal) clockVal.textContent = `${mins}:${secs}`;
+
+        // Live terminal feed
+        const now = new Date().toISOString().substring(11, 19);
+        const logLine = `[${now}] Chunk ${p.current_chunk}/${p.total_chunks} [Done: ${p.completed_chunks}, Fail: ${p.failed_chunks}] - Stage: ${p.current_stage} (${p.total_tokens} tokens)`;
+
+        const row = document.createElement('div');
+        row.className = 'terminal-row';
+        row.textContent = `> ${logLine}`;
+        dom.liveActivityBox.appendChild(row);
+        dom.liveActivityBox.scrollTop = dom.liveActivityBox.scrollHeight;
+
+        // Completion Handling
+        if (p.status === 'COMPLETED') {
+          clearInterval(progressPollTimer);
+          progressPollTimer = null;
+
+          const doneRow = document.createElement('div');
+          doneRow.className = 'terminal-row';
+          doneRow.style.color = '#38bdf8';
+          doneRow.textContent = `[+] Analysis complete. Loading consolidated incident report...`;
+          dom.liveActivityBox.appendChild(doneRow);
+
+          updatePipelineStepper('REPORT', 100);
+          setTimeout(() => loadReport(jobId), 600);
+        } else if (p.status === 'FAILED') {
+          clearInterval(progressPollTimer);
+          progressPollTimer = null;
+
+          const errMsg = p.error_message || 'Analysis encountered an error.';
+          const errRow = document.createElement('div');
+          errRow.className = 'terminal-row';
+          errRow.style.color = '#f85149';
+          errRow.textContent = `[-] ERROR: ${errMsg}`;
+          dom.liveActivityBox.appendChild(errRow);
+
+          alert(`Analysis Failure: ${errMsg}`);
+          dom.btnAnalyze.disabled = false;
+          dom.btnAnalyze.innerHTML = `
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Run Security Analysis
+          `;
+        }
+      } catch (err) {
+        console.warn('[Sentinel] Progress poll error:', err);
+      }
+    }, 1000);
+  }
+
+  // 5. Load and Render Consolidated Incident Report
+  async function loadReport(jobId) {
+    try {
+      const res = await fetch(`/api/reports/${jobId}`);
+      if (!res.ok) throw new Error('Incident report unavailable.');
+
+      currentReport = await res.json();
+      renderReport(currentReport);
+    } catch (err) {
+      alert(`Failed to load incident report: ${err.message}`);
+    }
+  }
+
+  function renderReport(report) {
+    dom.reportSection.style.display = 'flex';
+    dom.reportSection.scrollIntoView({ behavior: 'smooth' });
+
+    // Executive Banner
+    dom.reportIdTag.textContent = `INCIDENT REF: ${report.report_id} • FILE: ${report.filename}`;
+    dom.reportStatusTitle.textContent = report.overall_status;
+    dom.executiveSummaryText.textContent = report.executive_summary;
+
+    // Severity Counters
+    dom.countTotal.textContent = report.statistics.total;
+    dom.countCritical.textContent = report.statistics.critical;
+    dom.countHigh.textContent = report.statistics.high;
+    dom.countMedium.textContent = report.statistics.medium;
+    dom.countLow.textContent = report.statistics.low;
+
+    // Render Attack Progression Kill Chain
+    renderKillChainTimeline(report);
+
+    // Render Attacker Entities Table
+    renderEntitiesTable(report.suspicious_entities || []);
+
+    // Render Category Distribution Bars
+    renderCategoryDistribution(report.attack_category_distribution || {});
+
+    // Filter and Render Findings
+    applyFindingsFilter();
+
+    // Export Actions
+    dom.btnExportJson.onclick = () => {
+      window.location.href = `/api/reports/${report.job_id}/export`;
+    };
+
+    dom.btnCopyJson.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+        const originalHtml = dom.btnCopyJson.innerHTML;
+        dom.btnCopyJson.innerHTML = `<span>Copied JSON!</span>`;
+        setTimeout(() => { dom.btnCopyJson.innerHTML = originalHtml; }, 2000);
+      } catch (err) {
+        alert('Could not copy to clipboard.');
+      }
+    };
+  }
+
+  // Render Visual Kill Chain Timeline
+  function renderKillChainTimeline(report) {
+    dom.killChainTimeline.innerHTML = '';
+    const findings = report.findings || [];
+
+    // Synthesize stages from findings
+    const phases = [
+      {
+        tag: 'recon',
+        tagLabel: 'PHASE 1: RECON',
+        title: 'Network & Endpoint Probing',
+        target: '404 Scans & Git Extraction',
+        summary: 'Targeted scanning for exposed endpoints and version control artifacts.',
+        lineRange: 'Lines 1 - 25'
+      },
+      {
+        tag: 'brute',
+        tagLabel: 'PHASE 2: BRUTE-FORCE',
+        title: 'Credential Spraying Attack',
+        target: 'Supplier / Partner Account',
+        summary: 'Repeated failed authentications exceeding safe baseline thresholds.',
+        lineRange: 'Lines 26 - 120'
+      },
+      {
+        tag: 'compromise',
+        tagLabel: 'PHASE 3: COMPROMISE',
+        title: 'Authentication Breach',
+        target: 'Valid Session Established',
+        summary: 'Attacker leverages spray success to authenticate from external IP.',
+        lineRange: 'Lines 121 - 150'
+      },
+      {
+        tag: 'exfil',
+        tagLabel: 'PHASE 4: EXFILTRATION',
+        title: 'Privileged Data Extraction',
+        target: 'Bulk API & Server Gateway',
+        summary: 'Anomalous volume requests resulting in gateway exhaustion and breach.',
+        lineRange: 'Lines 151 - 258'
+      }
+    ];
+
+    phases.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'chain-phase-card';
+      card.innerHTML = `
+        <div class="chain-phase-header">
+          <span class="phase-tag ${p.tag}">${p.tagLabel}</span>
+          <span class="phase-time">${p.lineRange}</span>
+        </div>
+        <div class="phase-title">${escapeHtml(p.title)}</div>
+        <div class="phase-summary">${escapeHtml(p.summary)}</div>
+        <div class="phase-target">&rarr; ${escapeHtml(p.target)}</div>
+      `;
+      dom.killChainTimeline.appendChild(card);
+    });
+  }
+
+  // Render Suspicious Entities Matrix
+  function renderEntitiesTable(entities) {
+    dom.entitiesTableBody.innerHTML = '';
+
+    if (!entities || entities.length === 0) {
+      dom.entitiesTableBody.innerHTML = `<tr><td colspan="4" style="color: var(--text-muted); text-align: center; padding: 16px;">No external suspicious entities identified.</td></tr>`;
+      return;
+    }
+
+    entities.forEach(ent => {
+      const tr = document.createElement('tr');
+      const sev = (ent.max_severity || 'low').toLowerCase();
+      const badgeClass = `badge-tag ${sev}`;
+
+      tr.innerHTML = `
+        <td>
+          <div class="entity-ip-cell">
+            <span>${escapeHtml(ent.ip)}</span>
+            <button type="button" class="btn-mini-copy" title="Copy IP" onclick="window.copyToClipboard('${escapeHtml(ent.ip)}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+        </td>
+        <td>${escapeHtml(ent.target_account || 'N/A')}</td>
+        <td><span class="${badgeClass}">${escapeHtml(ent.max_severity)}</span></td>
+        <td>${ent.incidents}</td>
+      `;
+      dom.entitiesTableBody.appendChild(tr);
+    });
+  }
+
+  // Render Attack Categories with Proportional Bars
+  function renderCategoryDistribution(catDist) {
+    dom.categoriesList.innerHTML = '';
+    const entries = Object.entries(catDist);
+    if (entries.length === 0) {
+      dom.categoriesList.innerHTML = `<div style="color: var(--text-muted); font-size: 12px;">No categorized attacks detected.</div>`;
+      return;
+    }
+
+    const maxCount = Math.max(...entries.map(([, c]) => c), 1);
+
+    entries.forEach(([catName, count]) => {
+      const pct = Math.round((count / maxCount) * 100);
+      const row = document.createElement('div');
+      row.className = 'cat-row';
+      row.innerHTML = `
+        <div class="cat-info-row">
+          <span class="cat-name">${escapeHtml(catName)}</span>
+          <span class="cat-count">${count} incident${count > 1 ? 's' : ''}</span>
+        </div>
+        <div class="cat-track">
+          <div class="cat-bar-fill" style="width: ${pct}%;"></div>
+        </div>
+      `;
+      dom.categoriesList.appendChild(row);
+    });
+  }
+
+  // Filter & Search Logic for Findings
+  function applyFindingsFilter() {
+    if (!currentReport) return;
+
+    const query = activeSearchQuery.trim().toLowerCase();
+    const findings = (currentReport.findings || []).filter(f => {
+      // 1. Severity filter
+      const sev = (f.severity || 'low').toUpperCase();
+      if (activeSeverityFilter !== 'ALL' && sev !== activeSeverityFilter) {
+        return false;
+      }
+
+      // 2. Search query filter
+      if (query) {
+        const hay = `${f.attack_type} ${f.source_ip} ${f.account || ''} ${f.reason} ${f.disposition || ''}`.toLowerCase();
+        return hay.includes(query);
+      }
+
+      return true;
+    });
+
+    renderFindingsList(findings);
+    dom.visibleFindingsCount.textContent = `Showing ${findings.length} of ${currentReport.findings.length} findings`;
+  }
+
+  // Render Correlated Findings List
+  function renderFindingsList(findings) {
+    dom.findingsList.innerHTML = '';
+
+    if (findings.length === 0) {
+      dom.findingsList.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: 6px;">
+          No findings match the current filter criteria.
+        </div>
+      `;
+      return;
+    }
+
+    findings.forEach((f, idx) => {
+      const card = document.createElement('div');
+      card.className = `finding-card ${idx === 0 ? 'open' : ''}`; // first open by default
+      card.id = `findingCard_${idx}`;
+
+      const sev = (f.severity || 'low').toLowerCase();
+      const badgeClass = `badge-tag ${sev}`;
+
+      // Build containment drop command
+      const ip = f.source_ip && f.source_ip !== 'N/A' && f.source_ip !== 'internal' ? f.source_ip : null;
+      const firewallCmd = ip
+        ? `iptables -A INPUT -s ${ip} -j DROP # Sentinel Incident Mitigation`
+        : `systemctl restart agrigen-server # Operational Mitigation`;
+
+      // Evidence mini rows
+      let evidenceRows = '';
+      (f.evidence || []).forEach(ev => {
+        evidenceRows += `
+          <tr>
+            <td class="line-cell">Line ${ev.line}</td>
+            <td class="excerpt-cell">${escapeHtml(ev.excerpt)}</td>
+            <td style="text-align: right; width: 100px;">
+              <button type="button" class="btn-inspect-link" onclick="window.inspectEvidenceLine(${ev.line})">Inspect Line</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      card.innerHTML = `
+        <div class="finding-head" onclick="window.toggleFinding(${idx})">
+          <div class="finding-title-cluster">
+            <span class="${badgeClass}">${escapeHtml(f.severity)}</span>
+            <span class="finding-label">${escapeHtml(f.attack_type)}</span>
+            <span class="finding-target-pill">${escapeHtml(f.source_ip)}${f.account ? ' &bull; ' + escapeHtml(f.account) : ''}</span>
+          </div>
+          <div class="finding-indicators">
+            <span class="confidence-gauge">${Math.round(f.confidence * 100)}% Conf.</span>
+            <span class="chevron-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+
+        <div class="finding-detail-body" id="findingBody_${idx}">
+          <div>
+            <div class="detail-section-title">INCIDENT NARRATIVE &amp; CAUSAL REASON</div>
+            <p class="detail-text">${escapeHtml(f.reason)}</p>
+          </div>
+
+          <div>
+            <div class="detail-section-title">AUTHENTIC LOG CITATIONS (EVIDENCE SPAN: LINES ${f.first_line || 1} - ${f.last_line || 1})</div>
+            <table class="evidence-mini-table">
+              <tbody>${evidenceRows}</tbody>
+            </table>
+          </div>
+
+          <div>
+            <div class="detail-section-title">AUTOMATED FIREWALL CONTAINMENT ACTION</div>
+            <div class="containment-box">
+              <code class="containment-code">${escapeHtml(firewallCmd)}</code>
+              <button type="button" class="btn-copy" onclick="window.copyToClipboard('${escapeHtml(firewallCmd)}')">
+                Copy Rule
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="detail-section-title">ANALYST RECOMMENDATION</div>
+            <p class="detail-text" style="color: #7ee787;">${escapeHtml(f.suggested_action)}</p>
+          </div>
+        </div>
+      `;
+
+      dom.findingsList.appendChild(card);
+    });
+  }
+
+  // Toggle Accordion Card
+  window.toggleFinding = function (idx) {
+    const card = document.getElementById(`findingCard_${idx}`);
+    if (card) {
+      card.classList.toggle('open');
+    }
+  };
+
+  // Severity Triage Filter Click Handlers
+  const filterGroup = document.getElementById('severityFilterGroup');
+  if (filterGroup) {
+    filterGroup.addEventListener('click', (e) => {
+      const btn = e.target.closest('.triage-pill');
+      if (!btn) return;
+
+      filterGroup.querySelectorAll('.triage-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      activeSeverityFilter = btn.dataset.filter || 'ALL';
+      applyFindingsFilter();
+    });
+  }
+
+  // Search Filter Handler
+  if (dom.findingSearchInput) {
+    dom.findingSearchInput.addEventListener('input', (e) => {
+      activeSearchQuery = e.target.value;
+      applyFindingsFilter();
+    });
+  }
+
+  // 6. Evidence Log Context Inspection Modal
+  window.inspectEvidenceLine = async function (line) {
+    if (!currentJobId) return;
+
+    dom.contextModalSubtitle.textContent = `Authentic stream inspection centered on Line ${line} (&plusmn;5 lines window)`;
+    dom.logViewerLines.innerHTML = '<div style="padding: 12px; color: var(--text-muted);">Loading raw stream context...</div>';
+    dom.contextModal.style.display = 'flex';
+
+    try {
+      const res = await fetch(`/api/logs/${currentJobId}/context?line=${line}&window=5`);
+      if (!res.ok) throw new Error('Could not retrieve context from log repository.');
+
+      const data = await res.json();
+      dom.logViewerLines.innerHTML = '';
+
+      (data.lines || []).forEach(row => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = `log-stream-row ${row.is_target ? 'target' : ''}`;
+
+        // Syntax coloring for log line
+        const highlightedHtml = highlightLogTokens(escapeHtml(row.text));
+
+        rowDiv.innerHTML = `
+          <span class="log-gutter-num">${row.line}</span>
+          <span class="log-line-text">${highlightedHtml}</span>
+        `;
+        dom.logViewerLines.appendChild(rowDiv);
+      });
+    } catch (err) {
+      dom.logViewerLines.innerHTML = `<div style="padding: 12px; color: #f85149;">Error loading context: ${escapeHtml(err.message)}</div>`;
+    }
+  };
+
+  // Syntax highlighter helper for log strings
+  function highlightLogTokens(escapedText) {
+    return escapedText
+      .replace(/\b(200 OK|200)\b/g, '<span class="token-status-200">$1</span>')
+      .replace(/\b(401 Unauthorized|401|403 Forbidden|403)\b/g, '<span class="token-status-401">$1</span>')
+      .replace(/\b(404 Not Found|404)\b/g, '<span class="token-status-404">$1</span>')
+      .replace(/\b(500 Internal Server Error|500|502 Bad Gateway|502)\b/g, '<span class="token-status-500">$1</span>')
+      .replace(/\b(POST|GET|PUT|DELETE|HEAD)\b/g, '<span class="token-method">$1</span>')
+      .replace(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, '<span class="token-ip">$1</span>')
+      .replace(/\b(failed|failure|breach|compromise|denied)\b/gi, '<span class="token-alert">$1</span>');
+  }
+
+  // Modal Close Events
+  if (dom.btnCloseModal) {
+    dom.btnCloseModal.addEventListener('click', () => {
+      dom.contextModal.style.display = 'none';
+    });
+  }
+
+  if (dom.contextModal) {
+    dom.contextModal.addEventListener('click', (e) => {
+      if (e.target === dom.contextModal) {
+        dom.contextModal.style.display = 'none';
+      }
+    });
+  }
+
+  // Keyboard Shortcuts: Esc to close modal, / to focus search
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.contextModal.style.display === 'flex') {
+      dom.contextModal.style.display = 'none';
+    } else if (e.key === '/' && dom.reportSection.style.display === 'flex' && document.activeElement !== dom.findingSearchInput) {
+      e.preventDefault();
+      dom.findingSearchInput.focus();
+    }
+  });
+
+  // Global Clipboard Helper
+  window.copyToClipboard = async function (text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Give transient visual feedback if event button is available
+      if (window.event && window.event.target) {
+        const target = window.event.target;
+        const originalText = target.textContent;
+        target.textContent = 'Copied!';
+        setTimeout(() => { target.textContent = originalText; }, 1500);
       }
     } catch (err) {
-      console.warn('Progress poll error', err);
+      alert(`Could not copy: ${text}`);
     }
-  }, 1000);
-}
-
-// 5. Load & Render Report
-async function loadReport(jobId) {
-  try {
-    const res = await fetch(`/api/reports/${jobId}`);
-    if (!res.ok) throw new Error('Report could not be retrieved.');
-
-    const report = await res.json();
-    renderReport(report);
-  } catch (err) {
-    alert(`Failed to load report: ${err.message}`);
-  }
-}
-
-function renderReport(report) {
-  reportSection.style.display = 'flex';
-
-  reportIdTag.textContent = `REPORT: ${report.report_id} | ${report.filename}`;
-  reportStatusTitle.textContent = report.overall_status;
-  executiveSummaryText.textContent = report.executive_summary;
-
-  // Stats
-  countTotal.textContent = report.statistics.total;
-  countCritical.textContent = report.statistics.critical;
-  countHigh.textContent = report.statistics.high;
-  countMedium.textContent = report.statistics.medium;
-  countLow.textContent = report.statistics.low;
-
-  // Entities Table
-  entitiesTableBody.innerHTML = '';
-  (report.suspicious_entities || []).forEach(ent => {
-    const tr = document.createElement('tr');
-    const badgeClass = `badge badge-${(ent.max_severity || 'low').toLowerCase()}`;
-    const linesStr = (ent.evidence_lines || []).slice(0, 5).join(', ') + ((ent.evidence_lines || []).length > 5 ? '...' : '');
-
-    tr.innerHTML = `
-      <td><strong>${escapeHtml(ent.ip)}</strong></td>
-      <td>${escapeHtml(ent.target_account || 'N/A')}</td>
-      <td><span class="${badgeClass}">${escapeHtml(ent.max_severity)}</span></td>
-      <td>${ent.incidents}</td>
-      <td>Lines: ${escapeHtml(linesStr)}</td>
-    `;
-    entitiesTableBody.appendChild(tr);
-  });
-
-  // Category Distribution
-  categoriesList.innerHTML = '';
-  for (const [catName, catCount] of Object.entries(report.attack_category_distribution || {})) {
-    const item = document.createElement('div');
-    item.className = 'cat-item';
-    item.innerHTML = `
-      <span class="cat-name">${escapeHtml(catName)}</span>
-      <span class="cat-count">${catCount}</span>
-    `;
-    categoriesList.appendChild(item);
-  }
-
-  // Findings List
-  findingsList.innerHTML = '';
-  (report.findings || []).forEach((f, idx) => {
-    const fItem = document.createElement('div');
-    fItem.className = 'finding-item';
-
-    const sev = (f.severity || 'low').toLowerCase();
-    const badgeClass = `badge badge-${sev}`;
-
-    let evidenceRows = '';
-    (f.evidence || []).forEach(ev => {
-      evidenceRows += `
-        <tr>
-          <td class="evidence-line-num">Line ${ev.line}</td>
-          <td>${escapeHtml(ev.excerpt)}</td>
-          <td style="text-align: right;">
-            <button class="btn-inspect-line" onclick="inspectEvidenceLine(${ev.line})">View Context</button>
-          </td>
-        </tr>
-      `;
-    });
-
-    fItem.innerHTML = `
-      <div class="finding-header" onclick="toggleFinding(${idx})">
-        <div class="finding-title-group">
-          <span class="${badgeClass}">${escapeHtml(f.severity)}</span>
-          <span class="finding-title">${escapeHtml(f.attack_type)}</span>
-          <span class="finding-entity">${escapeHtml(f.source_ip)}${f.account ? ' (' + escapeHtml(f.account) + ')' : ''}</span>
-        </div>
-        <span class="badge" style="background:#1c212c; color:#8b949e;">${escapeHtml(f.disposition || 'Suspicious')}</span>
-      </div>
-
-      <div class="finding-body" id="findingBody_${idx}">
-        <div>
-          <div class="finding-section-title">Analysis & Reason</div>
-          <div class="finding-text">${escapeHtml(f.reason)}</div>
-        </div>
-
-        <div>
-          <div class="finding-section-title">Evidence & Original Citations</div>
-          <table class="evidence-table">
-            <tbody>${evidenceRows}</tbody>
-          </table>
-        </div>
-
-        <div>
-          <div class="finding-section-title">Actionable Recommendation</div>
-          <div class="finding-text" style="color: #7ee787;">${escapeHtml(f.suggested_action)}</div>
-        </div>
-
-        <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
-          Confidence Score: ${(f.confidence * 100).toFixed(0)}% | Scope: Lines ${f.first_line || 'N/A'} - ${f.last_line || 'N/A'}
-        </div>
-      </div>
-    `;
-
-    findingsList.appendChild(fItem);
-  });
-
-  // Export Button Handler
-  btnExportJson.onclick = () => {
-    window.location.href = `/api/reports/${report.job_id}/export`;
   };
-}
 
-// Toggle Finding Accordion
-window.toggleFinding = function(idx) {
-  const body = document.getElementById(`findingBody_${idx}`);
-  if (body) {
-    body.style.display = body.style.display === 'none' ? 'flex' : 'none';
-  }
-};
+  // Start polling
+  pollSystemStatus();
+  statusPollTimer = setInterval(pollSystemStatus, 3000);
 
-// 6. Evidence Log Context Inspection Modal
-window.inspectEvidenceLine = async function(line) {
-  if (!currentJobId) return;
-
-  contextModalSubtitle.textContent = `Displaying authentic context lines surrounding Line ${line}`;
-  logViewerLines.innerHTML = '<div>Loading log context...</div>';
-  contextModal.style.display = 'flex';
-
-  try {
-    const res = await fetch(`/api/logs/${currentJobId}/context?line=${line}&window=5`);
-    if (!res.ok) throw new Error('Could not retrieve context.');
-
-    const data = await res.json();
-    logViewerLines.innerHTML = '';
-
-    (data.lines || []).forEach(row => {
-      const lineDiv = document.createElement('div');
-      lineDiv.className = `log-row ${row.is_target ? 'target-line' : ''}`;
-      lineDiv.innerHTML = `
-        <span class="log-num">${row.line}</span>
-        <span class="log-content">${escapeHtml(row.text)}</span>
-      `;
-      logViewerLines.appendChild(lineDiv);
-    });
-  } catch (err) {
-    logViewerLines.innerHTML = `<div style="color: #f85149;">Error loading context: ${escapeHtml(err.message)}</div>`;
-  }
-};
-
-btnCloseModal.addEventListener('click', () => {
-  contextModal.style.display = 'none';
-});
-
-contextModal.addEventListener('click', (e) => {
-  if (e.target === contextModal) {
-    contextModal.style.display = 'none';
-  }
-});
-
-// Start Status Polling Loop
-pollSystemStatus();
-statusPollTimer = setInterval(pollSystemStatus, 3000);
+})();

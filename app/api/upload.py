@@ -87,3 +87,57 @@ async def upload_log_file(file: UploadFile = File(...)):
         status="PENDING",
         message="File uploaded and verified successfully. Ready for analysis."
     )
+
+@router.post("/load-sample", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
+async def load_sample_log():
+    """
+    Instantly stages the Cultive8 Workspace Agrigen regression log for zero-friction evaluation.
+    """
+    candidates = [
+        Path("Cultive8_Workspace_Agrigen_Server.log"),
+        Path(__file__).resolve().parent.parent.parent / "Cultive8_Workspace_Agrigen_Server.log",
+        Path("tests/fixtures/Cultive8_Workspace_Agrigen_Server.log")
+    ]
+    sample_path = None
+    for cand in candidates:
+        if cand.exists():
+            sample_path = cand
+            break
+
+    if not sample_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sample regression log file not found in repository."
+        )
+
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    clean_filename = "Cultive8_Workspace_Agrigen_Server.log"
+    dest_path = settings.upload_dir / clean_filename
+
+    # Read and write to uploads
+    content = sample_path.read_bytes()
+    dest_path.write_bytes(content)
+
+    sha256_hash = hashlib.sha256(content).hexdigest()
+    total_lines = content.count(b"\n")
+    if len(content) > 0 and total_lines == 0:
+        total_lines = 1
+
+    job_id = db.create_job(
+        filename=clean_filename,
+        file_path=str(dest_path),
+        file_size=len(content),
+        file_hash=sha256_hash,
+        total_lines=total_lines
+    )
+
+    return UploadResponse(
+        job_id=job_id,
+        filename=clean_filename,
+        file_size_bytes=len(content),
+        file_sha256=sha256_hash,
+        total_lines=total_lines,
+        status="PENDING",
+        message="Sample regression log loaded into queue successfully."
+    )
+
