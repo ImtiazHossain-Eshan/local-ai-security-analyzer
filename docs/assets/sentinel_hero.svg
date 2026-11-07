@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#05080e" />
+      <stop offset="50%" stop-color="#0a101d" />
+      <stop offset="100%" stop-color="#04060a" />
+    </linearGradient>
+    
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#111827" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#0c121e" stop-opacity="0.9" />
+    </linearGradient>
+
+    <linearGradient id="accentLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0" />
+      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Filter for subtle glow -->
+    <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <style>
+    .mono { font-family: 'JetBrains Mono', 'Consolas', monospace; }
+    .sans { font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .title { font-weight: 700; fill: #ffffff; letter-spacing: 3px; }
+    .tagline { fill: #94a3b8; font-size: 14px; font-weight: 500; letter-spacing: 0.5px; }
+    .badge-text { font-size: 11px; font-weight: 600; fill: #38bdf8; letter-spacing: 0.8px; }
+    .node-title { font-size: 12px; font-weight: 700; fill: #ffffff; letter-spacing: 0.5px; }
+    .node-sub { font-size: 10px; fill: #64748b; }
+    .grid-line { stroke: #1e293b; stroke-width: 1; stroke-opacity: 0.4; }
+  </style>
+
+  <!-- Background Base -->
+  <rect width="1200" height="460" rx="12" fill="url(#bgGrad)" stroke="#1e293b" stroke-width="1.5" />
+
+  <!-- Subtle Blueprint Grid -->
+  <g class="grid-line">
+    <line x1="100" y1="0" x2="100" y2="460" />
+    <line x1="300" y1="0" x2="300" y2="460" />
+    <line x1="500" y1="0" x2="500" y2="460" />
+    <line x1="700" y1="0" x2="700" y2="460" />
+    <line x1="900" y1="0" x2="900" y2="460" />
+    <line x1="1100" y1="0" x2="1100" y2="460" />
+    <line x1="0" y1="90" x2="1200" y2="90" />
+    <line x1="0" y1="210" x2="1200" y2="210" />
+    <line x1="0" y1="330" x2="1200" y2="330" />
+  </g>
+
+  <!-- Ambient Glow Behind Shield -->
+  <circle cx="600" cy="140" r="140" fill="#0284c7" opacity="0.12" filter="blur(50px)" />
+
+  <!-- Top Air-Gap Verification Pill -->
+  <g transform="translate(480, 36)">
+    <rect width="240" height="28" rx="14" fill="#0c1626" stroke="#0284c7" stroke-width="1.2" stroke-opacity="0.6" />
+    <circle cx="16" cy="14" r="4" fill="#34d399" />
+    <text x="30" y="18" class="mono badge-text">100% AIR-GAPPED &bull; ZERO CLOUD</text>
+  </g>
+
+  <!-- Central Shield & Brand Title -->
+  <g transform="translate(566, 80)">
+    <path d="M34 2 C16 12, 4 10, 4 10 L4 46 C4 72, 34 88, 34 88 C34 88, 64 72, 64 46 L64 10 C64 10, 52 12, 34 2 Z" 
+          fill="none" stroke="url(#shieldGrad)" stroke-width="3" filter="url(#cyanGlow)" />
+    <path d="M26 44 L32 50 L44 36" fill="none" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- Title & Division -->
+  <text x="600" y="210" text-anchor="middle" class="mono title" font-size="36">S E N T I N E L</text>
+  <text x="600" y="238" text-anchor="middle" class="sans tagline">OFFLINE LOCAL AI SECURITY LOG INTELLIGENCE &bull; 4GB RAM CONSTRAINED</text>
+
+  <!-- Horizontal Divider Line -->
+  <line x1="200" y1="262" x2="1000" y2="262" stroke="url(#accentLine)" stroke-width="1.5" />
+
+  <!-- 4 Architecture Pipeline Stage Cards -->
+  <g transform="translate(120, 290)">
+    <!-- Node 1: Ingestion -->
+    <g transform="translate(0, 0)">
+      <rect width="210" height="96" rx="8" fill="url(#cardGrad)" stroke="#1e293b" stroke-width="1.2" />
+      <circle cx="24" cy="24" r="8" fill="#0369a1" fill-opacity="0.3" stroke="#38bdf8" stroke-width="1" />
+      <text x="24" y="27" text-anchor="middle" class="mono" font-size="9" fill="#38bdf8">01</text>
+      <text x="44" y="28" class="mono node-title">RAW LOG STREAM</text>
+      <text x="20" y="56" class="sans node-sub">Preserves 1-indexed lines</text>
+      <text x="20" y="74" class="mono" font-size="10" fill="#38bdf8">&bull; Zero file copies</text>
+    </g>
+
+    <!-- Connector 1 -->
+    <path d="M214 48 L246 48" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3" />
+
+    <!-- Node 2: Token Chunker -->
+    <g transform="translate(250, 0)">
+      <rect width="210" height="96" rx="8" fill="url(#cardGrad)" stroke="#1e293b" stroke-width="1.2" />
+      <circle cx="24" cy="24" r="8" fill="#0369a1" fill-opacity="0.3" stroke="#38bdf8" stroke-width="1" />
+      <text x="24" y="27" text-anchor="middle" class="mono" font-size="9" fill="#38bdf8">02</text>
+      <text x="44" y="28" class="mono node-title">TOKEN CHUNKER</text>
+      <text x="20" y="56" class="sans node-sub">2,048 token hard ceiling</text>
+      <text x="20" y="74" class="mono" font-size="10" fill="#38bdf8">&bull; Dynamic budget</text>
+    </g>
+
+    <!-- Connector 2 -->
+    <path d="M464 48 L496 48" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3" />
+
+    <!-- Node 3: Local Neural Engine -->
+    <g transform="translate(500, 0)">
+      <rect width="210" height="96" rx="8" fill="url(#cardGrad)" stroke="#1e293b" stroke-width="1.2" />
+      <circle cx="24" cy="24" r="8" fill="#0369a1" fill-opacity="0.3" stroke="#38bdf8" stroke-width="1" />
+      <text x="24" y="27" text-anchor="middle" class="mono" font-size="9" fill="#38bdf8">03</text>
+      <text x="44" y="28" class="mono node-title">QWEN 3.5 0.8B</text>
+      <text x="20" y="56" class="sans node-sub">Q4_K_M on 2 vCPU threads</text>
+      <text x="20" y="74" class="mono" font-size="10" fill="#34d399">&bull; RSS &lt; 900 MB RAM</text>
+    </g>
+
+    <!-- Connector 3 -->
+    <path d="M714 48 L746 48" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3" />
+
+    <!-- Node 4: Correlation & Kill Chain -->
+    <g transform="translate(750, 0)">
+      <rect width="210" height="96" rx="8" fill="url(#cardGrad)" stroke="#1e293b" stroke-width="1.2" />
+      <circle cx="24" cy="24" r="8" fill="#0369a1" fill-opacity="0.3" stroke="#38bdf8" stroke-width="1" />
+      <text x="24" y="27" text-anchor="middle" class="mono" font-size="9" fill="#38bdf8">04</text>
+      <text x="44" y="28" class="mono node-title">KILL CHAIN DOSSIER</text>
+      <text x="20" y="56" class="sans node-sub">Cross-chunk correlation</text>
+      <text x="20" y="74" class="mono" font-size="10" fill="#f87171">&bull; iptables auto-rules</text>
+    </g>
+  </g>
+
+  <!-- Bottom Hardware Spec Bar -->
+  <g transform="translate(330, 416)">
+    <text class="mono" font-size="11" fill="#64748b">
+      <tspan fill="#38bdf8">HOST CEILING:</tspan> 4 GB RAM &bull; 
+      <tspan fill="#38bdf8">CPU:</tspan> 2 vCPU Threads &bull; 
+      <tspan fill="#38bdf8">CONTEXT:</tspan> 2,048 Tokens &bull; 
+      <tspan fill="#34d399">VERIFIED:</tspan> 21/21 Unit/E2E Tests
+    </text>
+  </g>
+</svg>
