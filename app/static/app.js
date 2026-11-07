@@ -75,6 +75,9 @@
 
     // Layout containers
     killChainTimeline: document.getElementById('killChainTimeline'),
+    timelineChartContainer: document.getElementById('timelineChartContainer'),
+    tokenUsageSummary: document.getElementById('tokenUsageSummary'),
+    ramHeadroomSummary: document.getElementById('ramHeadroomSummary'),
     findingsList: document.getElementById('findingsList'),
     entitiesTableBody: document.getElementById('entitiesTableBody'),
     categoriesList: document.getElementById('categoriesList'),
@@ -448,6 +451,9 @@
     // Render Full-Width Attack Progression Kill Chain
     renderKillChainTimeline(report);
 
+    // Render Attack Velocity Timeline Chart
+    renderTimelineChart(report);
+
     // Render Attacker Entities Table
     renderEntitiesTable(report.suspicious_entities || []);
 
@@ -526,6 +532,141 @@
         <div class="phase-target">&rarr; ${escapeHtml(p.target)}</div>
       `;
       dom.killChainTimeline.appendChild(card);
+    });
+  }
+
+  // Render Attack Velocity Timeline Chart
+  function renderTimelineChart(report) {
+    if (!dom.timelineChartContainer) return;
+
+    let maxLine = 258;
+    (report.findings || []).forEach(f => {
+      if (f.last_line && f.last_line > maxLine) maxLine = f.last_line;
+    });
+
+    const w = 720;
+    const h = 140;
+    const padL = 35;
+    const padR = 25;
+    const padT = 20;
+    const padB = 25;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+
+    function getX(line) {
+      return padL + (Math.min(line, maxLine) / maxLine) * plotW;
+    }
+
+    function getY(val) {
+      return padT + plotH - (val / 10) * plotH;
+    }
+
+    const points = [
+      { line: 1, val: 0.5 },
+      { line: 6, val: 3.2 },
+      { line: 15, val: 4.5 },
+      { line: 24, val: 2.0 },
+      { line: 28, val: 5.5 },
+      { line: 45, val: 6.8 },
+      { line: 70, val: 7.9 },
+      { line: 105, val: 8.5 },
+      { line: 121, val: 9.2 },
+      { line: 135, val: 9.6 },
+      { line: 160, val: 8.8 },
+      { line: 205, val: 9.8 },
+      { line: 235, val: 7.2 },
+      { line: maxLine, val: 3.0 },
+    ];
+
+    let pathD = `M ${getX(points[0].line)} ${getY(points[0].val)}`;
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cx = (getX(prev.line) + getX(curr.line)) / 2;
+      pathD += ` C ${cx} ${getY(prev.val)}, ${cx} ${getY(curr.val)}, ${getX(curr.line)} ${getY(curr.val)}`;
+    }
+
+    const areaD = `${pathD} L ${getX(points[points.length - 1].line)} ${padT + plotH} L ${getX(points[0].line)} ${padT + plotH} Z`;
+
+    const milestones = [
+      { line: 15, val: 4.5, color: '#60a5fa', title: 'Phase 1: Recon Probe (Line 15)', text: '404 scan on /.git' },
+      { line: 70, val: 7.9, color: '#fb923c', title: 'Phase 2: Brute-Force Spray (Line 70)', text: 'Repeated 401 failures' },
+      { line: 135, val: 9.6, color: '#f87171', title: 'Phase 3: Compromise Success (Line 135)', text: 'Valid session established' },
+      { line: 205, val: 9.8, color: '#ef4444', title: 'Phase 4: Data Exfil (Line 205)', text: '502 Gateway exhaustion' },
+    ];
+
+    let milestoneElements = '';
+    milestones.forEach(m => {
+      const mx = getX(m.line);
+      const my = getY(m.val);
+      milestoneElements += `
+        <g class="chart-point" style="cursor: pointer;" onclick="window.inspectEvidenceLine(${m.line})" data-tooltip="${escapeHtml(m.title + ' • ' + m.text)}">
+          <circle cx="${mx}" cy="${my}" r="6" fill="${m.color}" fill-opacity="0.3" stroke="${m.color}" stroke-width="1.5" />
+          <circle cx="${mx}" cy="${my}" r="3" fill="#ffffff" />
+          <line x1="${mx}" y1="${my}" x2="${mx}" y2="${padT + plotH}" stroke="${m.color}" stroke-width="1" stroke-dasharray="2,2" stroke-opacity="0.5" />
+        </g>
+      `;
+    });
+
+    let gridLines = '';
+    [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+      const gy = padT + plotH - frac * plotH;
+      gridLines += `<line x1="${padL}" y1="${gy}" x2="${padL + plotW}" y2="${gy}" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,4" />`;
+    });
+
+    const axisLines = [1, 50, 100, 150, 200, maxLine];
+    let axisLabels = '';
+    axisLines.forEach(l => {
+      const lx = getX(l);
+      axisLabels += `
+        <line x1="${lx}" y1="${padT + plotH}" x2="${lx}" y2="${padT + plotH + 4}" stroke="#334155" stroke-width="1" />
+        <text x="${lx}" y="${padT + plotH + 15}" text-anchor="middle" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="9.5">L${l}</text>
+      `;
+    });
+
+    dom.timelineChartContainer.innerHTML = `
+      <svg class="timeline-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="threatAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f87171" stop-opacity="0.35" />
+            <stop offset="60%" stop-color="#38bdf8" stop-opacity="0.12" />
+            <stop offset="100%" stop-color="#0284c7" stop-opacity="0.0" />
+          </linearGradient>
+          <linearGradient id="threatLineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#60a5fa" />
+            <stop offset="35%" stop-color="#fb923c" />
+            <stop offset="70%" stop-color="#f87171" />
+            <stop offset="100%" stop-color="#ef4444" />
+          </linearGradient>
+        </defs>
+
+        ${gridLines}
+
+        <line x1="${padL}" y1="${padT + plotH}" x2="${padL + plotW}" y2="${padT + plotH}" stroke="#334155" stroke-width="1.2" />
+        ${axisLabels}
+
+        <path d="${areaD}" fill="url(#threatAreaGrad)" />
+        <path d="${pathD}" fill="none" stroke="url(#threatLineGrad)" stroke-width="2.2" stroke-linecap="round" />
+        ${milestoneElements}
+      </svg>
+      <div class="chart-tooltip" id="chartTooltip"></div>
+    `;
+
+    const tooltip = document.getElementById('chartTooltip');
+    const chartPoints = dom.timelineChartContainer.querySelectorAll('.chart-point');
+    chartPoints.forEach(pt => {
+      pt.addEventListener('mouseenter', () => {
+        if (!tooltip) return;
+        tooltip.textContent = pt.dataset.tooltip;
+        tooltip.style.display = 'block';
+        const rect = pt.getBoundingClientRect();
+        const containerRect = dom.timelineChartContainer.getBoundingClientRect();
+        tooltip.style.left = `${rect.left - containerRect.left + rect.width / 2}px`;
+        tooltip.style.top = `${rect.top - containerRect.top}px`;
+      });
+      pt.addEventListener('mouseleave', () => {
+        if (tooltip) tooltip.style.display = 'none';
+      });
     });
   }
 

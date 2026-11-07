@@ -312,6 +312,86 @@
           </div>
         </div>
 
+        <!-- Visual Analytics & Hardware Telemetry Grid -->
+        <div class="visual-analytics-grid">
+          
+          <!-- Event Density & Threat Velocity Timeline Chart -->
+          <div class="console-panel chart-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h3 class="panel-title">Attack Velocity & Event Density Across Log Lines</h3>
+                <p class="panel-desc">Chronological threat trajectory mapped to exact physical log lines (1 to 258)</p>
+              </div>
+              <div class="chart-legend">
+                <span class="legend-item"><span class="legend-dot recon"></span>Recon / 404</span>
+                <span class="legend-item"><span class="legend-dot brute"></span>Brute Force / 401</span>
+                <span class="legend-item"><span class="legend-dot compromise"></span>Compromise / 200</span>
+                <span class="legend-item"><span class="legend-dot exfil"></span>Data Exfil / 502</span>
+              </div>
+            </div>
+            
+            <div class="timeline-chart-wrap" id="timelineChartContainer">
+              <!-- Rendered dynamically via SVG -->
+            </div>
+          </div>
+
+          <!-- Dual Hardware Constraint Gauges: 2,048 Tokens & 4GB RAM -->
+          <div class="console-panel budget-gauges-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h3 class="panel-title">Hardware & Token Budget Allocation</h3>
+                <p class="panel-desc">Strict 2,048-token context ceiling & 4 GB host memory headroom</p>
+              </div>
+            </div>
+
+            <div class="gauges-flex">
+              <!-- Token Window Stacked Visualizer -->
+              <div class="token-stack-wrap">
+                <div class="gauge-title-row">
+                  <span class="gauge-name">2,048-TOKEN CONTEXT WINDOW</span>
+                  <span class="gauge-val" id="tokenUsageSummary">1,548 / 2,048 Tokens (75% Cap)</span>
+                </div>
+                <div class="token-bar-track">
+                  <div class="token-seg seg-system" style="width: 10.7%;" title="System Instructions: 219 tok"></div>
+                  <div class="token-seg seg-schema" style="width: 23.7%;" title="Schema Template: 486 tok"></div>
+                  <div class="token-seg seg-state" style="width: 5.9%;" title="State Carryover: 120 tok"></div>
+                  <div class="token-seg seg-data" style="width: 35.3%;" title="Available Log Body: 723 tok"></div>
+                  <div class="token-seg seg-output" style="width: 17.1%;" title="Reserved Output: 350 tok"></div>
+                  <div class="token-seg seg-margin" style="width: 7.3%;" title="Safety Margin: 150 tok"></div>
+                </div>
+                <div class="token-legend-grid">
+                  <span class="token-key"><span class="t-dot seg-system"></span>System: 219</span>
+                  <span class="token-key"><span class="t-dot seg-schema"></span>Schema: 486</span>
+                  <span class="token-key"><span class="t-dot seg-state"></span>State: 120</span>
+                  <span class="token-key"><span class="t-dot seg-data"></span>Log Data: 723</span>
+                  <span class="token-key"><span class="t-dot seg-output"></span>Output: 350</span>
+                  <span class="token-key"><span class="t-dot seg-margin"></span>Safety: 150</span>
+                </div>
+              </div>
+
+              <!-- Memory RSS Circular/Gauge Meter -->
+              <div class="memory-gauge-wrap">
+                <div class="gauge-title-row">
+                  <span class="gauge-name">4 GB HOST MEMORY FOOTPRINT</span>
+                  <span class="gauge-val" id="ramHeadroomSummary">935 MB / 4,096 MB (77% Headroom)</span>
+                </div>
+                <div class="memory-bar-track">
+                  <div class="mem-seg seg-model" style="width: 12.4%;" title="Model Weights (Q4_K_M): 508 MB"></div>
+                  <div class="mem-seg seg-runtime" style="width: 10.4%;" title="Python / FastAPI / SQLite: 427 MB"></div>
+                  <div class="mem-seg seg-free" style="width: 77.2%;" title="Free Host Headroom: 3,161 MB"></div>
+                </div>
+                <div class="memory-legend-row">
+                  <span class="token-key"><span class="t-dot seg-model"></span>Model: 508 MB</span>
+                  <span class="token-key"><span class="t-dot seg-runtime"></span>Runtime: 427 MB</span>
+                  <span class="token-key"><span class="t-dot seg-free"></span>Free Headroom: 3,161 MB (77%)</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
         <!-- Main Triage Split Grid (Spacious 70% / 30%) -->
         <div class="triage-split-layout">
           
