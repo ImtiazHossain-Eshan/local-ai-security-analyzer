@@ -15,7 +15,7 @@
 [![Air-Gapped](https://img.shields.io/badge/Air--Gapped-100%25%20Offline%20(llama.cpp)-06b6d4?style=flat-square)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-eab308?style=flat-square)](#)
 
-[Product story](#product-story) &bull; [Core capabilities](#core-capabilities) &bull; [System architecture](#system-architecture) &bull; [Hardware benchmarks](#hardware-benchmarks) &bull; [Quick start](#quick-start) &bull; [Verification tests](#verification-tests)
+[Product story](#product-story) &bull; [Screens](#screens) &bull; [Core capabilities](#core-capabilities) &bull; [System architecture](#system-architecture) &bull; [Hardware benchmarks](#hardware-benchmarks) &bull; [Quick start](#quick-start) &bull; [Verification tests](#verification-tests)
 
 *Designed and built by Imtiaz Hossain*
 
@@ -35,6 +35,36 @@ Modern security teams face a dilemma when analyzing sensitive telemetry:
 **Sentinel** was built to prove that lightweight local models can achieve enterprise-grade security log analysis entirely on edge hardware. 
 
 Operating under a strict **4 GB host RAM ceiling** and utilizing a local quantized model (**Qwen 3.5 0.8B Q4_K_M** via an in-process single-slot `llama.cpp` runtime), Sentinel ingests unparsed multi-format logs in a zero-copy streaming pipeline. It enforces mathematical token budgets, carries compact security state forward across chunks, preserves exact physical line numbers, and executes deterministic cross-chunk correlation to synthesize multi-stage attacks into an actionable cyber kill chain.
+
+---
+
+## Screens
+
+### Executive Incident Dossier & Attacker Kill Chain
+Synthesizes hours of distributed multi-chunk log telemetry into a unified incident status (**CRITICAL BREACH CONFIRMED**), primary attacker identification (`203.0.113.44`), target account (`workspace.admin`), and a 4-stage chronological cyber kill chain spanning from initial endpoint reconnaissance to privileged data exfiltration.
+
+![Sentinel Executive Dossier and Attacker Kill Chain](https://raw.githubusercontent.com/ImtiazHossain-Eshan/local-ai-security-analyzer/main/docs/assets/screen_executive_killchain.png)
+
+---
+
+### Threat Velocity Timeline & Hardware Constraint Telemetry
+Interactive attack velocity spline chart highlighting temporal attack milestones alongside real-time hardware gauges verifying strict adherence to the **2,048-token context window** and **4 GB RAM ceiling** (maintaining over 3.1 GB of host headroom).
+
+![Sentinel Threat Velocity and Hardware Gauges](https://raw.githubusercontent.com/ImtiazHossain-Eshan/local-ai-security-analyzer/main/docs/assets/screen_analytics_chart.png)
+
+---
+
+### Correlated Findings & Automated Firewall Containment
+In-panel severity triage filtering (`All Incidents`, `Critical`, `Medium`, `Low / Ops`), deep substring search across line numbers and entities, verifiable evidence citations, and 1-click automated firewall containment rules (`iptables -A INPUT -s 203.0.113.44 -j DROP`).
+
+![Sentinel Correlated Security Findings](https://raw.githubusercontent.com/ImtiazHossain-Eshan/local-ai-security-analyzer/main/docs/assets/screen_findings_triage.png)
+
+---
+
+### Zero-Hallucination Authentic Evidence Inspector
+Clicking **Inspect Line** on any evidence citation opens the authentic log stream modal, allowing security analysts to inspect verbatim raw log lines, surrounding temporal context, and colorized HTTP status codes with zero AI hallucinations.
+
+![Sentinel Authentic Evidence Inspector](https://raw.githubusercontent.com/ImtiazHossain-Eshan/local-ai-security-analyzer/main/docs/assets/screen_log_inspector.png)
 
 ---
 
