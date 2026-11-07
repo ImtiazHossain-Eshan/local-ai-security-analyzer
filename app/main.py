@@ -3,8 +3,11 @@ Main FastAPI Application Entrypoint for Sentinel Local AI Security Log Analyzer.
 """
 import os
 import asyncio
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

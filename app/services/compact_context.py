@@ -22,8 +22,31 @@ class CompactContext(BaseModel):
     open_investigations: List[str] = Field(default_factory=list)
 
     def to_json(self) -> str:
-        """Serialize to compact JSON string."""
+        """Serialize to compact JSON string strictly bounded to <100 tokens."""
+        # Ensure pruned before serializing
+        self._prune_context()
         return self.model_dump_json(exclude_none=True)
+
+    def _prune_context(self):
+        """Strictly bound context size to prevent prompt token overflow."""
+        # Cap known_ips to top 4 most critical entities
+        if len(self.known_ips) > 4:
+            # Score: failed_logins * 2 + (10 if has_compromise_indicator else 0) + last_seen_line / 1000.0
+            def score_ip(item):
+                ip, ctx = item
+                score = (ctx.failed_logins * 2) + (10 if ctx.has_compromise_indicator else 0)
+                if ctx.successful_logins > 0 and ctx.failed_logins > 0:
+                    score += 15 # escalating breach candidate
+                return (score, ctx.last_seen_line)
+
+            sorted_ips = sorted(self.known_ips.items(), key=score_ip, reverse=True)
+            self.known_ips = dict(sorted_ips[:4])
+
+        # Cap indicators and investigations
+        if len(self.attack_indicators) > 3:
+            self.attack_indicators = self.attack_indicators[-3:]
+        if len(self.open_investigations) > 2:
+            self.open_investigations = self.open_investigations[-2:]
 
     def update_from_chunk(
         self,
@@ -39,8 +62,16 @@ class CompactContext(BaseModel):
             line = ev.get("start_line", 0)
             ip = ev.get("client_ip")
             user = ev.get("username")
+            status_code = ev.get("status_code", 0)
 
             if not ip or ip == "Unknown":
+                continue
+
+            # Only track external suspicious/auth IPs to prevent cluttering context
+            is_auth = (status_code in (401, 403, 200) and user) or ("login" in ev.get("raw_text", "").lower())
+            is_suspicious = status_code in (401, 403, 500, 502) or ev.get("is_threat_indicator", False)
+
+            if not is_auth and not is_suspicious and ip not in self.known_ips:
                 continue
 
             if ip not in self.known_ips:
@@ -55,6 +86,11 @@ class CompactContext(BaseModel):
                 ip_entry.last_seen_line = line
             if not ip_entry.username and user:
                 ip_entry.username = user
+            if status_code == 401:
+                ip_entry.failed_logins += 1
+            elif status_code == 200 and ip_entry.failed_logins > 0:
+                ip_entry.successful_logins += 1
+                ip_entry.has_compromise_indicator = True
 
         # 2. Process AI context updates if provided
         if ai_updates:
@@ -79,18 +115,18 @@ class CompactContext(BaseModel):
                         entry.username = act.get("account")
                     if act.get("last_line", 0) > entry.last_seen_line:
                         entry.last_seen_line = act.get("last_line", 0)
+                    if entry.failed_logins > 0 and entry.successful_logins > 0:
+                        entry.has_compromise_indicator = True
 
             # Attack indicators
             for ind in ai_updates.get("attack_indicators", []):
                 if ind and ind not in self.attack_indicators:
                     self.attack_indicators.append(ind)
-            # Cap indicators to top 5 to prevent token bloat
-            if len(self.attack_indicators) > 5:
-                self.attack_indicators = self.attack_indicators[-5:]
 
             # Open investigations
             for inv in ai_updates.get("open_investigations", []):
                 if inv and inv not in self.open_investigations:
                     self.open_investigations.append(inv)
-            if len(self.open_investigations) > 4:
-                self.open_investigations = self.open_investigations[-4:]
+
+        # Enforce strict pruning after updates
+        self._prune_context()

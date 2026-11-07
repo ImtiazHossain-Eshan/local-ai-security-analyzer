@@ -70,8 +70,15 @@
     countHigh: document.getElementById('countHigh'),
     countMedium: document.getElementById('countMedium'),
     countLow: document.getElementById('countLow'),
+    panelCountTotal: document.getElementById('panelCountTotal'),
+    panelCountCritical: document.getElementById('panelCountCritical'),
+    panelCountHigh: document.getElementById('panelCountHigh'),
+    panelCountMedium: document.getElementById('panelCountMedium'),
+    panelCountLow: document.getElementById('panelCountLow'),
     findingSearchInput: document.getElementById('findingSearchInput'),
+    btnClearSearch: document.getElementById('btnClearSearch'),
     visibleFindingsCount: document.getElementById('visibleFindingsCount'),
+    findingsPanelContainer: document.getElementById('findingsPanelContainer'),
 
     // Layout containers
     killChainTimeline: document.getElementById('killChainTimeline'),
@@ -409,6 +416,7 @@
       alert(`Failed to load incident report: ${err.message}`);
     }
   }
+  window.loadReport = loadReport;
 
   function renderReport(report) {
     // Hide Progress HUD so Report has 100% of the screen
@@ -424,11 +432,18 @@
     dom.executiveSummaryText.textContent = report.executive_summary;
 
     // Severity Counters
-    dom.countTotal.textContent = report.statistics.total;
-    dom.countCritical.textContent = report.statistics.critical;
-    dom.countHigh.textContent = report.statistics.high;
-    dom.countMedium.textContent = report.statistics.medium;
-    dom.countLow.textContent = report.statistics.low;
+    const stats = report.statistics || { total: 0, critical: 0, high: 0, medium: 0, low: 0 };
+    if (dom.countTotal) dom.countTotal.textContent = stats.total;
+    if (dom.countCritical) dom.countCritical.textContent = stats.critical;
+    if (dom.countHigh) dom.countHigh.textContent = stats.high;
+    if (dom.countMedium) dom.countMedium.textContent = stats.medium;
+    if (dom.countLow) dom.countLow.textContent = stats.low;
+
+    if (dom.panelCountTotal) dom.panelCountTotal.textContent = stats.total;
+    if (dom.panelCountCritical) dom.panelCountCritical.textContent = stats.critical;
+    if (dom.panelCountHigh) dom.panelCountHigh.textContent = stats.high;
+    if (dom.panelCountMedium) dom.panelCountMedium.textContent = stats.medium;
+    if (dom.panelCountLow) dom.panelCountLow.textContent = stats.low;
 
     // Impact KPI Cards
     const primaryEntity = (report.suspicious_entities && report.suspicious_entities[0]) || {};
@@ -738,23 +753,34 @@
 
     const query = activeSearchQuery.trim().toLowerCase();
     const findings = (currentReport.findings || []).filter(f => {
-      // 1. Severity filter
+      // 1. Robust Severity filter
       const sev = (f.severity || 'low').toUpperCase();
-      if (activeSeverityFilter !== 'ALL' && sev !== activeSeverityFilter) {
-        return false;
+      if (activeSeverityFilter !== 'ALL') {
+        if (activeSeverityFilter === 'CRITICAL' && !sev.includes('CRIT')) return false;
+        if (activeSeverityFilter === 'HIGH' && !sev.includes('HIGH')) return false;
+        if (activeSeverityFilter === 'MEDIUM' && !sev.includes('MED')) return false;
+        if (activeSeverityFilter === 'LOW' && !(sev.includes('LOW') || sev.includes('INFO') || sev.includes('OPS'))) return false;
       }
 
-      // 2. Search query filter
+      // 2. Comprehensive Search query filter
       if (query) {
-        const hay = `${f.attack_type} ${f.source_ip} ${f.account || ''} ${f.reason} ${f.disposition || ''}`.toLowerCase();
-        return hay.includes(query);
+        const evidenceLines = (f.evidence || []).map(e => `line ${e.line} ${e.excerpt || ''}`).join(' ');
+        const hay = `${f.attack_type || ''} ${f.source_ip || ''} ${f.account || ''} ${f.reason || ''} ${f.suggested_action || ''} ${f.disposition || ''} ${f.severity || ''} ${evidenceLines}`.toLowerCase();
+        if (!hay.includes(query)) return false;
       }
 
       return true;
     });
 
+    // Toggle clear search button
+    if (dom.btnClearSearch) {
+      dom.btnClearSearch.style.display = query ? 'inline-block' : 'none';
+    }
+
     renderFindingsList(findings);
-    dom.visibleFindingsCount.textContent = `Showing ${findings.length} of ${currentReport.findings.length} findings`;
+    if (dom.visibleFindingsCount) {
+      dom.visibleFindingsCount.textContent = `Showing ${findings.length} of ${currentReport.findings.length} findings`;
+    }
   }
 
   // Render Correlated Findings List
@@ -763,8 +789,10 @@
 
     if (findings.length === 0) {
       dom.findingsList.innerHTML = `
-        <div style="padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: 6px;">
-          No findings match the current filter criteria.
+        <div style="padding: 32px 20px; text-align: center; color: var(--text-muted); background: var(--bg-subtle); border: 1px dashed var(--border-default); border-radius: 6px;">
+          <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 6px;">No findings match "${escapeHtml(activeSearchQuery || activeSeverityFilter)}"</div>
+          <p style="font-size: 12px; margin-bottom: 14px;">Try clearing your search query or selecting a different severity triage level.</p>
+          <button type="button" class="btn-inspect-link" onclick="window.resetTriageFilters()" style="padding: 6px 16px; font-size: 12px; border-radius: 4px;">Reset All Filters</button>
         </div>
       `;
       return;
@@ -857,25 +885,60 @@
     }
   };
 
-  // Severity Triage Filter Click Handlers
-  const filterGroup = document.getElementById('severityFilterGroup');
-  if (filterGroup) {
-    filterGroup.addEventListener('click', (e) => {
-      const btn = e.target.closest('.triage-pill');
-      if (!btn) return;
-
-      filterGroup.querySelectorAll('.triage-pill').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      activeSeverityFilter = btn.dataset.filter || 'ALL';
-      applyFindingsFilter();
+  // Helper: Synchronize active styling across all pill buttons
+  function syncFilterPills(filterVal) {
+    document.querySelectorAll('.triage-pill').forEach(btn => {
+      const isMatch = (btn.dataset.filter || 'ALL').toUpperCase() === filterVal.toUpperCase();
+      btn.classList.toggle('active', isMatch);
     });
   }
 
-  // Search Filter Handler
+  // Global Reset Filters Helper
+  window.resetTriageFilters = function () {
+    activeSeverityFilter = 'ALL';
+    activeSearchQuery = '';
+    if (dom.findingSearchInput) dom.findingSearchInput.value = '';
+    if (dom.btnClearSearch) dom.btnClearSearch.style.display = 'none';
+    syncFilterPills('ALL');
+    applyFindingsFilter();
+  };
+
+  // Severity Triage Filter Click Handlers (Delegated and Direct)
+  document.querySelectorAll('.triage-pill').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const filter = (btn.dataset.filter || 'ALL').toUpperCase();
+      activeSeverityFilter = filter;
+      syncFilterPills(filter);
+      applyFindingsFilter();
+
+      // If clicked from the executive strip at top, smooth-scroll down to findings
+      if (btn.closest('#execFilterGroup') && dom.findingsPanelContainer) {
+        dom.findingsPanelContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // Search Filter Handler with Debounce
+  let searchDebounceTimer = null;
   if (dom.findingSearchInput) {
     dom.findingSearchInput.addEventListener('input', (e) => {
-      activeSearchQuery = e.target.value;
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        activeSearchQuery = e.target.value;
+        applyFindingsFilter();
+      }, 150);
+    });
+  }
+
+  // Clear Search Button
+  if (dom.btnClearSearch) {
+    dom.btnClearSearch.addEventListener('click', () => {
+      activeSearchQuery = '';
+      if (dom.findingSearchInput) {
+        dom.findingSearchInput.value = '';
+        dom.findingSearchInput.focus();
+      }
       applyFindingsFilter();
     });
   }

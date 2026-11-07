@@ -26,11 +26,13 @@ logger = logging.getLogger("sentinel.analysis")
 
 class AnalysisService:
     def __init__(self):
-        self.queue: asyncio.Queue[str] = asyncio.Queue()
+        self.queue: Optional[asyncio.Queue[str]] = None
         self._worker_task: Optional[asyncio.Task] = None
         self._current_job_id: Optional[str] = None
 
     def start_worker(self):
+        if self.queue is None:
+            self.queue = asyncio.Queue()
         if self._worker_task is None or self._worker_task.done():
             self._worker_task = asyncio.create_task(self._process_queue())
 
@@ -40,8 +42,8 @@ class AnalysisService:
         if not job:
             raise ValueError(f"Job {job_id} not found.")
         db.update_job(job_id, status=JobStatus.PENDING.value, current_stage=Stage.UPLOADED.value)
-        await self.queue.put(job_id)
         self.start_worker()
+        await self.queue.put(job_id)
 
     async def _process_queue(self):
         """Single-worker queue loop processing one job at a time."""
@@ -139,13 +141,36 @@ class AnalysisService:
 
             db.update_chunk(chunk_record["id"], status=ChunkStatus.PROCESSING.value)
 
-            # Assemble analysis prompt with dynamic compact context
+            # Assemble analysis prompt with dynamic compact context and hard token ceiling enforcement
+            current_compact_json = compact_context.to_json()
+            sys_tokens = tokenizer_service.count_tokens(sys_prompt)
+            current_log_text = chunk.log_text
+
+            # Compute skeleton prompt overhead without log entries
+            skeleton = analysis_template.format(
+                chunk_id=chunk.chunk_id,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                compact_context_json=current_compact_json,
+                log_entries_text=""
+            )
+            overhead_tokens = sys_tokens + tokenizer_service.count_tokens(skeleton) + 25
+            max_log_tokens = max(150, settings.max_input_tokens - overhead_tokens)
+
+            # Ensure log text strictly adheres to dynamic remaining token budget
+            current_log_tokens = tokenizer_service.count_tokens(current_log_text)
+            if current_log_tokens > max_log_tokens:
+                logger.info(
+                    f"[Chunk {chunk.chunk_id}] Log tokens ({current_log_tokens}) exceed budget ({max_log_tokens}). Safely truncating to prevent context overflow."
+                )
+                current_log_text = tokenizer_service.truncate_to_tokens(current_log_text, max_log_tokens)
+
             rendered_user_prompt = analysis_template.format(
                 chunk_id=chunk.chunk_id,
                 start_line=chunk.start_line,
                 end_line=chunk.end_line,
-                compact_context_json=compact_context.to_json(),
-                log_entries_text=chunk.log_text
+                compact_context_json=current_compact_json,
+                log_entries_text=current_log_text
             )
 
             messages = [

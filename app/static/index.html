@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sentinel | Local AI Security Command Console</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=2.1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -257,11 +257,11 @@
             Synthesizing executive cyber brief...
           </div>
 
-          <!-- Severity Quick-Filter Buttons -->
-          <div class="triage-filter-row">
+          <!-- Executive Triage Quick Navigation Strip -->
+          <div class="triage-filter-row exec-triage-strip">
             <div class="filter-left">
               <span class="filter-lead">SEVERITY TRIAGE:</span>
-              <div class="filter-pills-group" id="severityFilterGroup">
+              <div class="filter-pills-group" id="execFilterGroup">
                 <button type="button" class="triage-pill active" data-filter="ALL" id="pillTotal">
                   <span class="triage-name">All Incidents</span>
                   <span class="triage-num" id="countTotal">0</span>
@@ -287,14 +287,6 @@
                   <span class="triage-num" id="countLow">0</span>
                 </button>
               </div>
-            </div>
-            
-            <div class="search-box-wrap">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input type="text" id="findingSearchInput" placeholder="Filter by IP, account, or attack..." aria-label="Search security findings">
             </div>
           </div>
         </div>
@@ -396,13 +388,55 @@
         <div class="triage-split-layout">
           
           <!-- Primary Findings Column -->
-          <div class="console-panel findings-panel">
+          <div class="console-panel findings-panel" id="findingsPanelContainer">
             <div class="panel-header">
               <div class="panel-title-group">
                 <h3 class="panel-title">Correlated Security Incidents</h3>
                 <p class="panel-desc">Synthesized cross-chunk findings with verifiable line citations</p>
               </div>
               <div class="panel-count-badge" id="visibleFindingsCount">Showing 0 findings</div>
+            </div>
+
+            <!-- In-Panel Triage & Search Toolbar directly above findings -->
+            <div class="triage-filter-row findings-filter-toolbar">
+              <div class="filter-left">
+                <span class="filter-lead">FILTER:</span>
+                <div class="filter-pills-group" id="severityFilterGroup">
+                  <button type="button" class="triage-pill active" data-filter="ALL" id="panelPillTotal">
+                    <span class="triage-name">All</span>
+                    <span class="triage-num" id="panelCountTotal">0</span>
+                  </button>
+                  <button type="button" class="triage-pill critical" data-filter="CRITICAL" id="panelPillCritical">
+                    <span class="triage-dot"></span>
+                    <span class="triage-name">Critical</span>
+                    <span class="triage-num" id="panelCountCritical">0</span>
+                  </button>
+                  <button type="button" class="triage-pill high" data-filter="HIGH" id="panelPillHigh">
+                    <span class="triage-dot"></span>
+                    <span class="triage-name">High</span>
+                    <span class="triage-num" id="panelCountHigh">0</span>
+                  </button>
+                  <button type="button" class="triage-pill medium" data-filter="MEDIUM" id="panelPillMedium">
+                    <span class="triage-dot"></span>
+                    <span class="triage-name">Medium</span>
+                    <span class="triage-num" id="panelCountMedium">0</span>
+                  </button>
+                  <button type="button" class="triage-pill low" data-filter="LOW" id="panelPillLow">
+                    <span class="triage-dot"></span>
+                    <span class="triage-name">Low / Ops</span>
+                    <span class="triage-num" id="panelCountLow">0</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div class="search-box-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="findingSearchInput" placeholder="Filter by IP, account, line #, or attack..." aria-label="Search security findings">
+                <button type="button" id="btnClearSearch" class="btn-clear-search" style="display: none;" title="Clear search">&times;</button>
+              </div>
             </div>
 
             <div class="findings-stack" id="findingsList">
@@ -484,6 +518,6 @@
 
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.1"></script>
 </body>
 </html>

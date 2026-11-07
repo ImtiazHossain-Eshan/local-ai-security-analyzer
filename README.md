@@ -1,8 +1,6 @@
-<p align="center">
-  <img src="docs/assets/sentinel_hero.png" alt="Sentinel Local AI Security Intelligence Console" width="100%">
-</p>
-
 <div align="center">
+
+![Sentinel Local AI Security Intelligence Console](https://raw.githubusercontent.com/ImtiazHossain-Eshan/local-ai-security-analyzer/main/docs/assets/sentinel_hero.png)
 
 # Sentinel
 
@@ -11,7 +9,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-0284c7?style=flat-square&logo=linux&logoColor=white)](#)
 [![Model](https://img.shields.io/badge/Model-Qwen%203.5--0.8B%20(Q4__K__M)-f97316?style=flat-square)](#)
-[![Memory Footprint](https://img.shields.io/badge/RAM-%3C%201.1%20GB%20Used%20(4GB%20Ceiling)-10b981?style=flat-square)](#)
+[![Memory Footprint](https://img.shields.io/badge/RAM-Under%201.1%20GB%20Used%20(4GB%20Ceiling)-10b981?style=flat-square)](#)
 [![Context Window](https://img.shields.io/badge/Context-2%2C048%20Tokens%20Strict-8b5cf6?style=flat-square)](#)
 [![Tests](https://img.shields.io/badge/Tests-21%20passing-10b981?style=flat-square)](#)
 [![Air-Gapped](https://img.shields.io/badge/Air--Gapped-100%25%20Offline%20(llama.cpp)-06b6d4?style=flat-square)](#)
